@@ -7,38 +7,48 @@
 //
 
 import RxSwift
+import RxCocoa
+import CoreLocation
 
 final class ForecastViewModel {
+
+    typealias GroupedForecastViewModel = [(String, [ForecastCellViewModel])]
 
     private let apiService: ApiService
     private let locationManager: LocationManager
 
     private let disposeBag = DisposeBag()
 
-    init(apiService: ApiService, locationManager: LocationManager) {
+    // Input
+    let viewWillAppearSubject = PublishSubject<Bool>()
+
+    // Output
+    var forecast: Observable<GroupedForecastViewModel> = .empty()
+
+    init(apiService: ApiService, locationManager: LocationManager = .shared) {
         self.apiService = apiService
         self.locationManager = locationManager
-    }
 
-    lazy var forecast: Observable<[(String, [ForecastCellViewModel])]> = {
-        return locationManager.location.asObservable()
-            .flatMap { [weak self] location -> Observable<[Forecast]> in
-                guard let strongSelf = self, let location = location else {
-                    return Observable.just([])
-                }
-                return strongSelf.apiService
-                    .getForecast(latitude: location.latitude, longitude: location.longitude)
+        self.forecast = viewWillAppearSubject
+            .flatMap { _ in
+                return locationManager.location.asObservable()
+            }
+            .flatMap { location -> Observable<[Forecast]> in
+                guard let location = location else { return .empty() }
+
+                return apiService.getForecast(latitude: location.latitude, longitude: location.longitude)
                     .asObservable()
             }
-            .map { [weak self] array in
-                return self?.groupData(array) ?? []
+            .map { [weak self] forecast in
+                return self?.groupData(forecast) ?? []
             }
-    }()
+            .asObservable()
+    }
 }
 
 private extension ForecastViewModel {
 
-    func groupData(_ data: [Forecast]) -> [(String, [ForecastCellViewModel])] {
+    func groupData(_ data: [Forecast]) -> GroupedForecastViewModel {
 
         var models: [(String, [ForecastCellViewModel])] = []
         let dates = Set(data.map { $0.fullDayString } )

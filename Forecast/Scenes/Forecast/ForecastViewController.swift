@@ -15,6 +15,7 @@ final class ForecastViewController: BaseViewController {
         return "ForecastViewController"
     }
 
+    // MARK: Outlets
     @IBOutlet private var tableView: UITableView!
 
     private let viewModel: ForecastViewModel
@@ -24,7 +25,8 @@ final class ForecastViewController: BaseViewController {
             tableView.reloadData()
         }
     }
-
+    
+    // MARK: Lifecycle
     init(viewModel: ForecastViewModel) {
         self.viewModel = viewModel
         super.init()
@@ -34,13 +36,21 @@ final class ForecastViewController: BaseViewController {
         fatalError("ForecastViewController coder init not implemented")
     }
 
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        configure()
+        bindViewModel()
+    }
+
     private func bindViewModel() {
+        rx.viewWillAppear
+            .bind(to: viewModel.viewWillAppearSubject)
+            .disposed(by: disposeBag)
+
         viewModel.forecast
-            .subscribe(onNext: { [weak self] forecast in
-                guard let strongSelf = self else { return }
-                strongSelf.data = forecast
-            }, onError: { [weak self] (error) in
-                self?.show(error: error)
+            .asDriver(onErrorJustReturn: [])
+            .drive(onNext: { data in
+                self.data = data
             })
             .disposed(by: disposeBag)
     }
@@ -62,6 +72,27 @@ extension ForecastViewController: UITableViewDataSource {
         let viewModel = data[indexPath.section].1[indexPath.row]
         cell.configure(viewModel)
         return cell
+    }
+}
+
+// MARK: - Private configure
+private extension ForecastViewController {
+
+    func configure() {
+        configureTableView()
+        configureTitle()
+    }
+
+    func configureTitle() {
+        LocationManager.shared.getCity { (placemarks, _) in
+            self.title = "\(placemarks?.first?.locality ?? "")"
+        }
+    }
+
+    func configureTableView() {
+        tableView.dataSource = self
+        tableView.delegate = self
+        tableView.registerCell(ForecastTableViewCell.self)
     }
 }
 
